@@ -75,4 +75,5 @@ public:
 	}
 };
 
-#endif /* PARTICLE_FILTER_H_ */
+#endif 
+/* PARTICLE_FILTER_H_ */
