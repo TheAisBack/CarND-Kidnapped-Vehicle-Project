@@ -102,6 +102,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], v
 		double std_y = std_landmark[1];
 		double weight = 1.0;
 		bool landmark_found = false;
+		particles[p].weight = 1.0;
 		// Observations of map Coordinates
 		for(int i = 0; i < observations.size(); i++) {
 			LandmarkObs obs;
@@ -118,7 +119,6 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], v
       	landmark.y = map_landmarks.landmark_list[j].y_f;
       	landmark.id = map_landmarks.landmark_list[j].id_i;
       	predicted.push_back(landmark);
-      	landmark_found = true;
       }
     }
     //sending predicted and observations
@@ -126,25 +126,29 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], v
     
     for(int k = 0; k < trans_observations.size(); k++) {
 		// Calculating for the Multivariate-Gaussian Probability
-    	if (landmark_found) {
-				double meas_x = trans_observations[k].x;
-				double meas_y = trans_observations[k].y;
-				double mu_x = 0.0;
-				double mu_y = 0.0;
-				for (int o = 0; o < predicted.size(); o++) {
-					if(predicted[o].id == trans_observations[k].id) {
-						mu_x = predicted[o].x;
-						mu_y = predicted[o].y;
-					}
+   	// https://discussions.udacity.com/t/output-always-zero/260432/32
+			double meas_x = trans_observations[k].x;
+			double meas_y = trans_observations[k].y;
+			double mu_x = 1.0;
+			double mu_y = 1.0;
+			for (int n = 0; n < predicted.size(); n++) {
+				if(predicted[n].id == trans_observations[k].id) {
+					mu_x = predicted[n].x;
+					mu_y = predicted[n].y;
 				}
+			}
+			mu_y = meas_y - mu_y;
+			mu_y = mu_y * mu_y;
+			mu_x = meas_x - mu_x;
+			mu_x = mu_x * mu_x;
+			std_x = 2 * std_x * std_x;
+			std_y = 2 * std_y * std_y;
+			long double gauss_norm = (1/(2 * M_PI * std_x * std_y)); // Calculating normalization term
+			long double exponent = exp(-1*(mu_x/(std_x) + (mu_y/(std_y)))); // Calculating exponent
+			long double mult_weight = gauss_norm * exponent; // Calculating weight using normalization terms and exponent
 
-				long double gauss_norm = (1/(2 * M_PI * std_x * std_y)); // Calculating normalization term
-				long double exponent = exp(-1*(pow(meas_x - mu_x, 2)/(2 * pow(std_x, 2)) + (pow(meas_y - mu_y, 2)/(2 * pow(std_y, 2))))); // Calculating exponent
-				long double mult_weight = gauss_norm * exponent; // Calculating weight using normalization terms and exponent
-
-				if (mult_weight > 0) {
-					weight *= mult_weight;
-				}
+			if (mult_weight > 0) {
+				weight *= mult_weight;
 			}
 		}
 		weights.push_back(weight);
