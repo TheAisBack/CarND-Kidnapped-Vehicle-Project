@@ -18,7 +18,7 @@ using namespace std;
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
 	// TODO: Set the number of particles. Initialize all particles to first position (based on estimates of x, y, theta and their uncertainties from GPS) and all weights to 1. Add random Gaussian noise to each particle.
 	// NOTE: Consult particle_filter.h for more information about this method (and others in this file).
-	num_particles = 100; // Pick that works.
+	num_particles = 50; // Pick that works.
 	
 	default_random_engine gen;
 
@@ -50,17 +50,17 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 		double new_y;
 		double new_theta;
 
-		if(yaw_rate == 0) {
-			new_x = particles[i].x + velocity * delta_t * cos(particles[i].theta);
-			new_y = particles[i].y + velocity * delta_t * sin(particles[i].theta);
+		if(fabs(yaw_rate) < 0.0001) {
+			particles[i].x += velocity * delta_t * cos(particles[i].theta); // changed from new_x = particles[i].x + velocity * delta_t * cos(particles[i].theta);
+			particles[i].y += velocity * delta_t * sin(particles[i].theta);
 			new_theta = particles[i].theta;
 		} else {
-			new_x = particles[i].x + velocity/yaw_rate * (sin(particles[i].theta+yaw_rate*delta_t)-sin(particles[i].theta));
-			new_y = particles[i].y + velocity/yaw_rate * (cos(particles[i].theta)-cos(particles[i].theta + yaw_rate*delta_t));
+			particles[i].x += velocity/yaw_rate * (sin(particles[i].theta+yaw_rate*delta_t)-sin(particles[i].theta));
+			particles[i].y += velocity/yaw_rate * (cos(particles[i].theta)-cos(particles[i].theta + yaw_rate*delta_t));
 			new_theta = particles[i].theta + yaw_rate * delta_t;
 		}
-		normal_distribution<double> N_x(new_x, std_pos[0]);
-		normal_distribution<double> N_y(new_y, std_pos[1]);
+		normal_distribution<double> N_x(particles[i].x, std_pos[0]);
+		normal_distribution<double> N_y(particles[i].y, std_pos[1]);
 		normal_distribution<double> N_theta(new_theta, std_pos[2]);
 
 		particles[i].x = N_x(gen);
@@ -98,10 +98,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], v
 	for(int p = 0; p < num_particles; p++) {
 		vector<LandmarkObs> trans_observations;
 		vector<LandmarkObs> predicted;
-		double std_x = std_landmark[0];
-		double std_y = std_landmark[1];
 		double weight = 1.0;
-		bool landmark_found = false;
 		particles[p].weight = 1.0;
 		// Observations of map Coordinates
 		for(int i = 0; i < observations.size(); i++) {
@@ -131,24 +128,26 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], v
 			double meas_y = trans_observations[k].y;
 			double mu_x = 1.0;
 			double mu_y = 1.0;
+			double mult_weight = 1.0;
 			for (int n = 0; n < predicted.size(); n++) {
 				if(predicted[n].id == trans_observations[k].id) {
 					mu_x = predicted[n].x;
 					mu_y = predicted[n].y;
 				}
 			}
-			mu_y = meas_y - mu_y;
-			mu_y = mu_y * mu_y;
-			mu_x = meas_x - mu_x;
-			mu_x = mu_x * mu_x;
-			std_x = 2 * std_x * std_x;
-			std_y = 2 * std_y * std_y;
-			long double gauss_norm = (1/(2 * M_PI * std_x * std_y)); // Calculating normalization term
-			long double exponent = exp(-1*(mu_x/(std_x) + (mu_y/(std_y)))); // Calculating exponent
-			long double mult_weight = gauss_norm * exponent; // Calculating weight using normalization terms and exponent
+			double std_x = std_landmark[0];
+			double std_y = std_landmark[1];
+			double muy = meas_y - mu_y;
+			double my = muy * muy;
+			double mux = meas_x - mu_x;
+			double mx = mux * mux;
+			double stdx = 2 * pow(std_x, 2);
+			double stdy = 2 * pow(std_y, 2);
+			double gauss_norm = (1/(2 * M_PI * stdx * stdy)) * exp(-1*(mx/(stdx) + (my/(stdy))));
+			mult_weight *= gauss_norm;
 
 			if (mult_weight > 0) {
-				weight *= mult_weight;
+				weight = mult_weight;
 			}
 		}
 		weights.push_back(weight);
