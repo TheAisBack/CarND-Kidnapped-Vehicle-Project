@@ -18,7 +18,7 @@ using namespace std;
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
 	// TODO: Set the number of particles. Initialize all particles to first position (based on estimates of x, y, theta and their uncertainties from GPS) and all weights to 1. Add random Gaussian noise to each particle.
 	// NOTE: Consult particle_filter.h for more information about this method (and others in this file).
-	num_particles = 25; // Pick that works.
+	num_particles = 10; // Pick that works.
 	
 	default_random_engine gen;
 
@@ -76,16 +76,17 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted, vector<Landm
 	// https://discussions.udacity.com/t/c-help-with-dataassociation-method/291220
 	// https://discussions.udacity.com/t/implementing-data-association/243745/7
 	for (int i = 0; i < observations.size(); i++) {
-		double min_distance = 200;
-
+		double min_distance = numeric_limits<double>::max();;
+		int ob_id = -1;
 		for (int j = 0; j < predicted.size(); j++) {
 			double distance = dist(observations[i].x, observations[i].y, predicted[j].x, predicted[j].y);
-
+			int pr_id = predicted[j].id;
 			if (distance < min_distance) {
 				min_distance = distance;
-				observations[i].id = predicted[j].id;
+				ob_id = pr_id;
 			}
 		}
+		observations[i].id = ob_id;
 	}
 }
 
@@ -99,14 +100,16 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], v
 		vector<LandmarkObs> trans_observations;
 		vector<LandmarkObs> predicted;
 		double weight = 1.0;
-		particles[p].weight = 1.0;
+		LandmarkObs obs;
 		// Observations of map Coordinates
 		for(int i = 0; i < observations.size(); i++) {
-			LandmarkObs obs;
-			obs.x = particles[p].x+(observations[i].x*cos(particles[p].theta)-observations[i].y*sin(particles[p].theta));
-			obs.y = particles[p].y+(observations[i].y*sin(particles[p].theta)+observations[i].y*cos(particles[p].theta));
-			trans_observations.push_back(obs);	
+			LandmarkObs trans_obs;
+			obs = observations[i];
+			trans_obs.x = (obs.x*cos(particles[p].theta))-(obs.y*(sin(particles[p].theta)))+particles[p].x;
+			trans_obs.y = (obs.x*sin(particles[p].theta))+(obs.y*(cos(particles[p].theta)))+particles[p].y;
+			trans_observations.push_back(trans_obs);	
 		}
+		particles[p].weight = 1.0;
 		for(int j = 0; j < map_landmarks.landmark_list.size(); j++) {
 			double closet_dis = sensor_range;	
       double distance = dist(particles[p].x, particles[p].y, map_landmarks.landmark_list[j].x_f, map_landmarks.landmark_list[j].y_f);
@@ -118,12 +121,12 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], v
       	predicted.push_back(landmark);
       }
     }
-    //sending predicted and observations
+    // Sending predicted and observations
     dataAssociation(predicted, trans_observations);
     
     for(int k = 0; k < trans_observations.size(); k++) {
-		// Calculating for the Multivariate-Gaussian Probability
-   	// https://discussions.udacity.com/t/output-always-zero/260432/32
+			// Calculating for the Multivariate-Gaussian Probability
+   		// https://discussions.udacity.com/t/output-always-zero/260432/32
 			double meas_x = trans_observations[k].x;
 			double meas_y = trans_observations[k].y;
 			double mu_x = 1.0;
@@ -133,6 +136,8 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], v
 				if(predicted[n].id == trans_observations[k].id) {
 					mu_x = predicted[n].x;
 					mu_y = predicted[n].y;
+					//cout<<"mu_x: "<<mu_x<<endl;
+					//cout<<"mu_y: "<<mu_y<<endl;
 				}
 			}
 			double std_x = std_landmark[0];
@@ -143,16 +148,19 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], v
 			double mx = mux * mux;
 			double stdx = 2 * pow(std_x, 2);
 			double stdy = 2 * pow(std_y, 2);
-			double gauss_norm = (1/(2 * M_PI * stdx * stdy)) * exp(-1*(mx/(stdx) + (my/(stdy))));
-			mult_weight *= gauss_norm;
+			double gauss_norm = exp(-1*(mx/(stdx) + (my/(stdy))))/(2 * M_PI * std_x * std_y);
 
-			if (mult_weight > 0) {
-				weight = mult_weight;
+			//cout<<"gauss_norm: "<<gauss_norm<<endl;			
+			if (gauss_norm > 0) {
+				weight *= gauss_norm;
+				//cout<<"weight: "<<weight<<endl;
 			}
 		}
 		weights.push_back(weight);
 		particles[p].weight = weight;
-	}
+		//cout<<"weight: "<<weight<<endl;
+		//cout<<"particles: "<<particles[p].weight<<endl;
+	}	
 }
 
 void ParticleFilter::resample() {
